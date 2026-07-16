@@ -5,6 +5,18 @@
 本文记录 Enigma Traffic Protocol 的用户可见变更。`0.1.0` 是首个实验版本，
 ETP/1 和 ETPH/1 尚未承诺长期线格式兼容性。
 
+## 0.2.0 - 2026-07-17
+
+### 新增
+
+- 可配置的 `standard`、`balanced`、`compact` 和 `high-padding` 流量 profile。
+- 独立于包内部实现的公共 API 互操作矩阵。
+
+### 变更
+
+- 完成初始实现计划，并将线格式不兼容的 cover 改进移入 ETP/2 路线图。
+- 更新协议与架构文档，以反映 mux/UoT 和 HTTP/TLS 集成现状。
+
 ## 0.1.0 - 2026-07-17
 
 ### 新增

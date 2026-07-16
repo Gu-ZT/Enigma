@@ -294,4 +294,7 @@ ETP/2 and a distinct derivation prefix. Because ETP/1 has no in-band negotiation
 applications must select future versions out of band rather than probing on the
 same stream.
 
-Additional complete-record interoperability vectors remain planned.
+The machine-readable derivation vector and the external-package public API
+interoperability matrix form the current compatibility gate. Complete-record
+cross-language vectors remain future work because sender randomness is visible
+in salts, padding, and cover variants.

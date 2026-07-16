@@ -45,8 +45,8 @@ internal/app ----> internal/tunnel ----> pkg/enigma
     +---- net.Listener    +---- ETPH/1 控制消息
 ```
 
-`pkg/enigma` 必须继续独立于命令代码和代理协议。未来的 mux 或 UDP 模式应
-放在流编码器之上，或使用新的协议标识实现，并配套独立规范和测试。
+`pkg/enigma` 必须继续独立于命令代码和代理协议。mux 和 UoT 已遵循该规则运行在
+流编码器之上，并具有独立规范和测试。线格式不兼容的 codec 仍必须使用新的协议标识。
 
 ## 变更指引
 

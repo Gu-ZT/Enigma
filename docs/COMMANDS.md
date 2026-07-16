@@ -156,10 +156,23 @@ only be used for isolated testing.
 These flags are available on both `server` and `client` and must be compatible
 at both ends.
 
+`-profile` selects a preset before explicit codec flags are applied:
+
+| Profile | Record padding | Cover padding | Max payload | Purpose |
+| --- | --- | --- | --- | --- |
+| `standard` | `0..0` | `0..0` | `16384` | Existing ETP/1 defaults |
+| `balanced` | `4..64` | `2..32` | `16384` | Moderate randomized padding |
+| `compact` | `0..0` | `0..0` | `32768` | Fewer records for large streams |
+| `high-padding` | `32..512` | `16..256` | `8192` | Higher representation variability |
+
+An explicitly supplied padding or payload flag overrides the selected preset.
+Both peers must still use compatible receive limits and alphabets.
+
 | Flag | Default | Purpose |
 | --- | --- | --- |
 | `-key HEX` | none | Hex PSK, mainly for local testing |
 | `-key-file PATH` | none | File containing the hex PSK; preferred |
+| `-profile` | `standard` | Codec preset listed above |
 | `-padding-min` | `0` | Minimum authenticated record padding |
 | `-padding-max` | `0` | Maximum authenticated record padding |
 | `-cover-padding-min` | `0` | Minimum printable cover padding |

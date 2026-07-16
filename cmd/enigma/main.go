@@ -251,6 +251,8 @@ func selectTargetSelector(socks5, httpConnect bool) app.TargetSelector {
 }
 
 type codecFlagValues struct {
+	flags           *flag.FlagSet
+	profile         *string
 	keyHex          *string
 	keyFile         *string
 	minPadding      *int
@@ -262,6 +264,8 @@ type codecFlagValues struct {
 
 func addCodecFlags(flags *flag.FlagSet) codecFlagValues {
 	return codecFlagValues{
+		flags:           flags,
+		profile:         flags.String("profile", "standard", "traffic profile: standard, balanced, compact, or high-padding"),
 		keyHex:          flags.String("key", "", "hex-encoded PSK of at least 32 bytes"),
 		keyFile:         flags.String("key-file", "", "file containing the hex-encoded PSK"),
 		minPadding:      flags.Int("padding-min", 0, "minimum encrypted record padding"),
@@ -291,13 +295,34 @@ func (values codecFlagValues) config() (enigma.Config, error) {
 	if err != nil {
 		return enigma.Config{}, fmt.Errorf("decode -key: %w", err)
 	}
+	profile, err := codecProfileByName(*values.profile)
+	if err != nil {
+		return enigma.Config{}, err
+	}
 	config := enigma.Config{
 		Key:             key,
-		MinPadding:      *values.minPadding,
-		MaxPadding:      *values.maxPadding,
-		MinCoverPadding: *values.minCoverPadding,
-		MaxCoverPadding: *values.maxCoverPadding,
-		MaxPayload:      *values.maxPayload,
+		MinPadding:      profile.minPadding,
+		MaxPadding:      profile.maxPadding,
+		MinCoverPadding: profile.minCoverPadding,
+		MaxCoverPadding: profile.maxCoverPadding,
+		MaxPayload:      profile.maxPayload,
+	}
+	specified := make(map[string]bool)
+	values.flags.Visit(func(f *flag.Flag) { specified[f.Name] = true })
+	if specified["padding-min"] {
+		config.MinPadding = *values.minPadding
+	}
+	if specified["padding-max"] {
+		config.MaxPadding = *values.maxPadding
+	}
+	if specified["cover-padding-min"] {
+		config.MinCoverPadding = *values.minCoverPadding
+	}
+	if specified["cover-padding-max"] {
+		config.MaxCoverPadding = *values.maxCoverPadding
+	}
+	if specified["max-payload"] {
+		config.MaxPayload = *values.maxPayload
 	}
 	if err := config.Validate(); err != nil {
 		return enigma.Config{}, err

@@ -54,10 +54,12 @@ PSK。
 - 自动将大写入拆分为有界记录；
 - 从已认证记录中进行小缓冲区读取；
 - 自定义可打印 cover 字母表和 padding 字母表；
+- `standard`、`balanced`、`compact` 和 `high-padding` 流量 profile；
 - 认证 X25519 隧道升级层；
 - 带显式目标协商的固定目标 TCP 客户端/服务端命令；
 - 使用相同目标协商的无认证 SOCKS5 本地监听器；
 - 延迟返回成功状态的 HTTP CONNECT 本地监听器。
+- 不依赖包内部实现的公共 API 互操作测试。
 
 ## 缺点与 TODO
 

@@ -58,10 +58,12 @@ records begin.
 - automatic splitting of large writes into bounded records;
 - partial reads from already authenticated records;
 - custom printable cover and padding alphabets;
+- `standard`, `balanced`, `compact`, and `high-padding` traffic profiles;
 - an authenticated X25519 tunnel upgrade;
 - a fixed-target TCP client/server command with explicit target negotiation.
 - a no-auth SOCKS5 local listener that uses the same target negotiation.
 - an HTTP CONNECT local listener with delayed success responses.
+- public-API interoperability tests independent of package internals.
 
 ## Limitations and TODO
 

@@ -4,6 +4,21 @@ This file records user-visible changes for Enigma Traffic Protocol. Version
 `0.1.0` is the first experimental release. ETP/1 and ETPH/1 are not yet stable
 compatibility commitments.
 
+## 0.2.0 - 2026-07-17
+
+### Added
+
+- Configurable `standard`, `balanced`, `compact`, and `high-padding` traffic
+  profiles.
+- A public API interoperability matrix independent of package internals.
+
+### Changed
+
+- Completed the original implementation plan and moved wire-incompatible cover
+  improvements to the ETP/2 roadmap.
+- Updated protocol and architecture documentation to reflect mux/UoT and
+  HTTP/TLS integration.
+
 ## 0.1.0 - 2026-07-17
 
 ### Added

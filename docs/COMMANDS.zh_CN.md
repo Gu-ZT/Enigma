@@ -142,10 +142,23 @@ enigma client -tls -tls-server-name edge.example.com \
 
 服务端和客户端都支持下列参数，两端配置必须兼容。
 
+`-profile` 会先选择一组预设，随后再应用显式指定的 codec 参数：
+
+| Profile | 记录 padding | Cover padding | 最大 payload | 用途 |
+| --- | --- | --- | --- | --- |
+| `standard` | `0..0` | `0..0` | `16384` | 现有 ETP/1 默认值 |
+| `balanced` | `4..64` | `2..32` | `16384` | 中等随机 padding |
+| `compact` | `0..0` | `0..0` | `32768` | 大流量使用更少记录 |
+| `high-padding` | `32..512` | `16..256` | `8192` | 更高的表示变化程度 |
+
+显式指定的 padding 或 payload 参数会覆盖 profile 预设。两端仍必须使用兼容的接收
+上限和 alphabet。
+
 | 参数 | 默认值 | 用途 |
 | --- | --- | --- |
 | `-key HEX` | 无 | 十六进制 PSK，主要用于本地测试 |
 | `-key-file PATH` | 无 | 包含十六进制 PSK 的文件，推荐使用 |
+| `-profile` | `standard` | 上表列出的 codec 预设 |
 | `-padding-min` | `0` | 最小认证记录填充 |
 | `-padding-max` | `0` | 最大认证记录填充 |
 | `-cover-padding-min` | `0` | 最小可打印 cover 填充 |

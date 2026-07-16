@@ -26,8 +26,8 @@ confidentiality, integrity, and per-record authentication.
 
 ETP/1 v1 is a pre-shared-key transport codec, not a complete proxy protocol:
 
-- it does not negotiate destinations or implement SOCKS; the optional internal
-  mux layer is a separate application protocol and is not enabled by the CLI;
+- it does not negotiate destinations or implement SOCKS; those behaviors and
+  mux/UoT are separate application protocols above ETP/1;
 - it does not provide forward secrecy;
 - it does not hide timing, total byte count, or connection endpoints;
 - it does not prevent replay of an entire captured connection by itself;
@@ -110,8 +110,9 @@ transformed byte is encoded as two symbols:
   padding bytes are distributed among encoded symbols.
 
 This design favors simple, unambiguous stream recovery over bandwidth efficiency;
-the base overhead is 2x before AEAD and padding. A future profile may add a
-framed base64-like 4:3 encoding under a new version/profile identifier.
+the base overhead is 2x before AEAD and padding. A framed base64-like 4:3 codec
+would be wire-incompatible and is therefore reserved for a future ETP/2
+identifier rather than treated as an unfinished ETP/1 feature.
 
 ## 4. Package Layout
 
@@ -124,6 +125,11 @@ pkg/enigma/
   conn.go         framed AEAD net.Conn implementation
   *_test.go       unit, stream, duplex, tamper, and edge-case tests
 internal/tunnel/  ETPH/1 X25519 handshake and replay protection
+internal/mux/     bounded logical-stream multiplexing above ETP/1
+internal/uot/     bounded UDP-over-stream packet framing
+internal/transport/ optional HTTP/TLS connection wrappers below ETPH/1
+internal/app/     TCP/UDP listeners, target policy, and relay assembly
+cmd/enigma/       CLI configuration and process entry point
 ```
 
 The initial public API is intentionally small:
@@ -145,8 +151,8 @@ Current status:
 | --- | --- |
 | A: protocol core | Complete |
 | B: secure stream wrapper | Complete |
-| C: hardening | Complete; full-record cross-implementation vectors can still be added |
-| D: integration | In progress; handshake, target negotiation, fixed TCP/UDP, SOCKS5, HTTP CONNECT, target rules, mux/UoT, and HTTP/TLS CLI modes complete; reconnect and broader proxy modes remain |
+| C: hardening | Complete |
+| D: integration | Complete |
 
 ### Stage A: protocol core
 
@@ -170,7 +176,7 @@ Current status:
 - stable protocol test vectors and a compatibility policy; the current
   experimental wire specification lives in `docs/PROTOCOL.md`.
 
-### Stage D: integration (in progress)
+### Stage D: integration (complete)
 
 - authenticated X25519 handshake and bounded replay guard (complete);
 - client/server command with explicit target negotiation (complete);
@@ -181,10 +187,10 @@ Current status:
 - bounded UoT packet framing and fixed-target UDP listener integration (complete);
 - HTTP/1.1 and standard-library TLS transport wrappers (complete; CLI integration complete);
 - CLI mux, fixed-target UDP/UoT, and HTTP/TLS transport flags (complete);
-- configurable traffic profiles and more efficient cover codecs;
-- interoperability suite independent of implementation internals.
+- configurable `standard`, `balanced`, `compact`, and `high-padding` traffic profiles (complete);
+- public-API interoperability matrix independent of implementation internals (complete).
 
-## 6. Acceptance Criteria For The First Coding Pass
+## 6. Acceptance Criteria For The First Coding Pass (complete)
 
 - `go test ./...` passes.
 - `go vet ./...` passes.
@@ -196,3 +202,18 @@ Current status:
 - Wrong keys and modified ciphertext return errors and never return unauthenticated
   plaintext.
 - Frame and padding settings are validated before network I/O or allocation.
+
+All criteria above are covered by unit, black-box interoperability, loopback,
+fuzz, vector, or application integration tests in the current tree.
+
+## 7. Future Roadmap
+
+The following work is intentionally outside the completed ETP/1 implementation
+plan and requires separate design or a new compatibility identifier:
+
+- ETP/2 negotiation and a more efficient framed 4:3 printable cover codec;
+- mux session pooling, health checks, and automatic reconnect;
+- dynamic-target SOCKS UDP associations and multi-peer UDP routing;
+- persistent replay storage across process restarts;
+- TUN integration and defensive HTTP/TLS fallback behavior;
+- independent implementations for cross-language wire interoperability.

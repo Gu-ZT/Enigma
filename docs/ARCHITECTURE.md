@@ -47,9 +47,10 @@ internal/app ----> internal/tunnel ----> pkg/enigma
     +---- net.Listener    +---- ETPH/1 control messages
 ```
 
-`pkg/enigma` must remain independent of command code and proxy protocols. A
-future mux or UDP profile should therefore be introduced above the stream codec
-or under a new protocol identifier, with its own tests and specification.
+`pkg/enigma` must remain independent of command code and proxy protocols. The
+mux and UoT packages follow this rule by running above the stream codec with
+their own tests and specifications. A wire-incompatible codec still requires a
+new protocol identifier.
 
 ## Change Guidance
 

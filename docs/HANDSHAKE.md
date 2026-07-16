@@ -176,8 +176,9 @@ not send distinguishable protocol error responses.
   rate and TTL to avoid availability loss.
 - Fixed packet lengths and handshake timing are observable even though packet
   contents have no plaintext magic.
-- The handshake packets are binary high-entropy data. HTTP/TLS camouflage and
-  fallback behavior are separate future transport features.
+- The handshake packets are binary high-entropy data. Optional HTTP/TLS
+  wrappers are separate transport features in `internal/transport`; defensive
+  fallback behavior remains outside ETPH/1.
 - ETPH/1 does not negotiate protocol versions. Future incompatible handshakes
   require an out-of-band selection or a separately designed negotiation layer.
 

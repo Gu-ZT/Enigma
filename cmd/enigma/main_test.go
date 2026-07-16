@@ -155,3 +155,45 @@ func TestUDPFlagValidation(t *testing.T) {
 		t.Fatalf("client UDP error = %v", clientErr)
 	}
 }
+
+func TestCodecProfiles(t *testing.T) {
+	key := strings.Repeat("42", 32)
+	tests := []struct {
+		name            string
+		args            []string
+		maxPayload      int
+		maxPadding      int
+		maxCoverPadding int
+	}{
+		{name: "standard", args: []string{"-key", key}, maxPayload: 16 * 1024},
+		{name: "balanced", args: []string{"-key", key, "-profile", "balanced"}, maxPayload: 16 * 1024, maxPadding: 64, maxCoverPadding: 32},
+		{name: "compact", args: []string{"-key", key, "-profile", "compact"}, maxPayload: 32 * 1024},
+		{name: "high-padding", args: []string{"-key", key, "-profile", "high-padding"}, maxPayload: 8 * 1024, maxPadding: 512, maxCoverPadding: 256},
+		{name: "override", args: []string{"-key", key, "-profile", "balanced", "-padding-min", "0", "-padding-max", "0"}, maxPayload: 16 * 1024, maxCoverPadding: 32},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			flags := flag.NewFlagSet(test.name, flag.ContinueOnError)
+			values := addCodecFlags(flags)
+			if err := flags.Parse(test.args); err != nil {
+				t.Fatal(err)
+			}
+			config, err := values.config()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.MaxPayload != test.maxPayload || config.MaxPadding != test.maxPadding || config.MaxCoverPadding != test.maxCoverPadding {
+				t.Fatalf("profile config = payload %d padding %d cover %d", config.MaxPayload, config.MaxPadding, config.MaxCoverPadding)
+			}
+		})
+	}
+
+	flags := flag.NewFlagSet("invalid-profile", flag.ContinueOnError)
+	values := addCodecFlags(flags)
+	if err := flags.Parse([]string{"-key", key, "-profile", "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := values.config(); err == nil {
+		t.Fatal("unknown profile accepted")
+	}
+}
