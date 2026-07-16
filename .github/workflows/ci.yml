@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            race: true
+          - os: macos-latest
+            race: true
+          - os: windows-latest
+            race: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=$(while IFS= read -r dir; do find "$dir" -maxdepth 1 -name '*.go' -print; done < <(go list -f '{{.Dir}}' ./...))
+          unformatted=$(printf '%s\n' "$files" | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted Go files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run go vet
+        shell: bash
+        run: go vet ./...
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flags=("-count=1" "-shuffle=on")
+          if [ "${{ matrix.race }}" = "true" ]; then
+            flags+=("-race")
+          fi
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            flags+=("-p" "1")
+          fi
+          go test "${flags[@]}" ./...
+
+      - name: Build CLI
+        shell: bash
+        run: go build ./cmd/enigma
