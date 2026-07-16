@@ -194,6 +194,7 @@ need to run concurrently on unbuffered transports such as `net.Pipe`.
 - [ETPH/1 authenticated handshake](./docs/HANDSHAKE.md)
 - [`pkg/enigma` raw-stream API](./pkg/enigma/README.md)
 - [Implementation plan and roadmap](./PLAN.md)
+- [Changelog](./CHANGES.md)
 
 ## Protocol Flow
 

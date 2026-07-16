@@ -181,6 +181,7 @@ func main() {
 - [ETPH/1 认证握手](./docs/HANDSHAKE.md)
 - [`pkg/enigma` 原始流 API](./pkg/enigma/README.md)
 - [实现计划与路线图](./PLAN.md)
+- [变更日志](./CHANGES.md)
 
 ## 协议流程
 

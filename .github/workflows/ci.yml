@@ -36,7 +36,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Check formatting
+      - name: Check formatting (Unix)
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           set -euo pipefail
@@ -47,6 +48,18 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
+
+      - name: Check formatting (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path cmd,internal,pkg -Recurse -Filter *.go | Select-Object -ExpandProperty FullName
+          $unformatted = & gofmt -l $files
+          if ($LASTEXITCODE -ne 0 -or $unformatted) {
+            Write-Output "Unformatted Go files:"
+            $unformatted
+            exit 1
+          }
 
       - name: Run go vet
         shell: bash

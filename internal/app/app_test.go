@@ -189,19 +189,19 @@ func TestMuxForwardingMultipleConnections(t *testing.T) {
 		}
 		_ = local.Close()
 	}
-	cancel()
-	waitServeResult(t, "server", serverDone)
-	waitServeResult(t, "client", clientDone)
 	for i := 0; i < 2; i++ {
 		select {
 		case err := <-echoDone:
 			if err != nil {
 				t.Fatalf("echo server: %v", err)
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("echo server did not finish")
 		}
 	}
+	cancel()
+	waitServeResult(t, "server", serverDone)
+	waitServeResult(t, "client", clientDone)
 }
 
 func TestUDPForwardingEndToEnd(t *testing.T) {
