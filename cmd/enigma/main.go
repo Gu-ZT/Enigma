@@ -125,7 +125,11 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	serverAddress := flags.String("server", "", "ETPH/1 server host:port")
 	targetAddress := flags.String("target", "", "fixed target host:port")
 	socks5 := flags.Bool("socks5", false, "serve a local no-auth SOCKS5 listener instead of a fixed target")
-	socks5Timeout := flags.Duration("socks5-timeout", 10*time.Second, "local SOCKS5 handshake timeout")
+	httpConnect := flags.Bool("http-connect", false, "serve a local HTTP CONNECT listener instead of a fixed target")
+	localHandshakeTimeout := 10 * time.Second
+	flags.DurationVar(&localHandshakeTimeout, "local-handshake-timeout", localHandshakeTimeout, "local SOCKS5/HTTP handshake timeout")
+	flags.DurationVar(&localHandshakeTimeout, "socks5-timeout", localHandshakeTimeout, "deprecated alias for -local-handshake-timeout")
+	flags.DurationVar(&localHandshakeTimeout, "http-timeout", localHandshakeTimeout, "deprecated alias for -local-handshake-timeout")
 	dialTimeout := flags.Duration("dial-timeout", 10*time.Second, "server dial timeout")
 	codecFlags := addCodecFlags(flags)
 	handshakeFlags := addHandshakeFlags(flags)
@@ -138,12 +142,15 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	if *serverAddress == "" {
 		return fmt.Errorf("client -server is required")
 	}
-	if *socks5 {
+	if *socks5 && *httpConnect {
+		return fmt.Errorf("-socks5 and -http-connect are mutually exclusive")
+	}
+	if *socks5 || *httpConnect {
 		if *targetAddress != "" {
-			return fmt.Errorf("-target cannot be used with -socks5")
+			return fmt.Errorf("-target cannot be used with protocol-selected local modes")
 		}
-		if *socks5Timeout < 0 {
-			return fmt.Errorf("-socks5-timeout must not be negative")
+		if localHandshakeTimeout < 0 {
+			return fmt.Errorf("local handshake timeout must not be negative")
 		}
 	} else if err := tunnel.ValidateTargetAddress(*targetAddress); err != nil {
 		return fmt.Errorf("invalid -target: %w", err)
@@ -167,6 +174,8 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	logger := log.New(stderr, "enigma-client: ", log.LstdFlags)
 	if *socks5 {
 		logger.Printf("SOCKS5 listening on %s through %s", listener.Addr(), *serverAddress)
+	} else if *httpConnect {
+		logger.Printf("HTTP CONNECT listening on %s through %s", listener.Addr(), *serverAddress)
 	} else {
 		logger.Printf("listening on %s, forwarding to %s through %s", listener.Addr(), *targetAddress, *serverAddress)
 	}
@@ -174,16 +183,19 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 		Tunnel:                tunnelConfig,
 		ServerAddress:         *serverAddress,
 		TargetAddress:         *targetAddress,
-		TargetSelector:        selectTargetSelector(*socks5),
-		LocalHandshakeTimeout: *socks5Timeout,
+		TargetSelector:        selectTargetSelector(*socks5, *httpConnect),
+		LocalHandshakeTimeout: localHandshakeTimeout,
 		DialTimeout:           *dialTimeout,
 		Logger:                logger,
 	})
 }
 
-func selectTargetSelector(socks5 bool) app.TargetSelector {
+func selectTargetSelector(socks5, httpConnect bool) app.TargetSelector {
 	if socks5 {
 		return app.SOCKS5Selector
+	}
+	if httpConnect {
+		return app.HTTPConnectSelector
 	}
 	return nil
 }
@@ -295,7 +307,7 @@ const usageText = `Usage:
   enigma server -key-file PATH [-listen :8443] [-allow-target host:port]
   enigma client -key-file PATH -server host:port -target host:port [-listen 127.0.0.1:1080]
   enigma client -key-file PATH -server host:port -socks5 [-listen 127.0.0.1:1080]
+  enigma client -key-file PATH -server host:port -http-connect [-listen 127.0.0.1:1080]
 
-The client command supports fixed-target TCP forwarding and no-auth SOCKS5.
-It is not an HTTP CONNECT proxy.
+The client command supports fixed-target TCP forwarding, no-auth SOCKS5, and HTTP CONNECT.
 `

@@ -2,13 +2,13 @@
 
 [中文说明](./COMMANDS.zh_CN.md)
 
-The `cmd/enigma` program provides experimental fixed-target and no-auth SOCKS5
-TCP tunnels. It uses ETPH/1 for authenticated X25519 key establishment and
-ETP/1 for protected, printable traffic records.
+The `cmd/enigma` program provides experimental fixed-target, no-auth SOCKS5,
+and HTTP CONNECT TCP tunnels. It uses ETPH/1 for authenticated X25519 key
+establishment and ETP/1 for protected, printable traffic records.
 
-It is not an HTTP CONNECT proxy. Fixed-target mode forwards every local
-connection to one configured target; SOCKS5 mode selects a target per local
-connection.
+It is not a general HTTP proxy. Fixed-target mode forwards every local
+connection to one configured target; SOCKS5 and HTTP CONNECT modes select a
+target per local connection.
 
 ## Build
 
@@ -88,6 +88,21 @@ chooses its own domain, IPv4, or IPv6 target. The SOCKS5 success reply is sent
 only after the server has authenticated the tunnel, passed the target policy,
 and opened the target TCP connection.
 
+## HTTP CONNECT Mode
+
+```bash
+enigma client \
+  -http-connect \
+  -listen 127.0.0.1:1080 \
+  -server server.example.com:8443 \
+  -key-file enigma.key
+```
+
+The local listener accepts `CONNECT host:port HTTP/1.x` without proxy
+authentication. It returns `200 Connection Established` only after the remote
+target is open, and returns a generic `502 Bad Gateway` on remote failure. It
+does not accept ordinary HTTP methods or implement an HTTP application proxy.
+
 ## Common Codec Flags
 
 These flags are available on both `server` and `client` and must be compatible
@@ -126,10 +141,11 @@ it never evicts a live nonce early.
 | --- | --- | --- |
 | `-listen` | `127.0.0.1:1080` | Local TCP forwarding address |
 | `-server` | none | Required ETPH/1 server `host:port` |
-| `-target` | none | Fixed target `host:port`; omit with `-socks5` |
+| `-target` | none | Fixed target `host:port`; omit with `-socks5` or `-http-connect` |
 | `-socks5` | false | Enable no-auth SOCKS5 target selection |
+| `-http-connect` | false | Enable HTTP CONNECT target selection |
 | `-dial-timeout` | `10s` | Server TCP dial timeout |
-| `-socks5-timeout` | `10s` | Local SOCKS5 request deadline |
+| `-local-handshake-timeout` | `10s` | Local SOCKS5/HTTP request deadline |
 
 ## Shutdown and Errors
 
@@ -142,7 +158,7 @@ outbound dial errors remain in server logs.
 
 ## Current Limitations
 
-- no HTTP CONNECT, TUN, UDP, or multiplexing;
+- no TUN, UDP, or multiplexing;
 - no JSON configuration or automatic service installation;
 - no persistent replay database across restarts;
 - no HTTP/TLS camouflage or defensive fallback;
