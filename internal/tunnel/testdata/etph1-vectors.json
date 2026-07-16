@@ -1,0 +1,22 @@
+{
+  "protocol": "ETPH/1",
+  "timestamp": 1700000000,
+  "psk_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "handshake_key_hex": "e8a01478c61a8577a7e7545c885a77a53084fd3a7a6662ec53e71a243096cfeb",
+  "client_private_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+  "client_public_hex": "358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
+  "server_private_hex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+  "server_public_hex": "79a631eede1bf9c98f12032cdeadd0e7a079398fc786b88cc846ec89af85a51a",
+  "client_nonce_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+  "server_nonce_hex": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+  "client_outer_nonce_hex": "c0c1c2c3c4c5c6c7c8c9cacb",
+  "server_outer_nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
+  "client_plaintext_hex": "0101000000006553f100a0a1a2a3a4a5a6a7a8a9aaabacadaeaf358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
+  "client_packet_hex": "c0c1c2c3c4c5c6c7c8c9cacbabd4aec7e681d3483a9494c6113759bd7952bc9d4762471d06a94268ad0d513cc23c028fc32eae0da589ee8bd9f539dcd474ada878b4e53f68b03790cdf2bd34ec73c4ddfe8551acb98a",
+  "server_plaintext_hex": "0102a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf79a631eede1bf9c98f12032cdeadd0e7a079398fc786b88cc846ec89af85a51a",
+  "server_packet_hex": "d0d1d2d3d4d5d6d7d8d9dadb4b0c77b206ab87ab776117940c839d6a0610c6415e2fc6b0c8f79a2aacc00d4c9d25b2bae6a1235164ae85521ef600af74811855c04c6f35c03b9d2c1a410a57611a4627e41532975bb5161a5c37bd27c8e6",
+  "shared_secret_hex": "04c304fb1ca83cee75e206344231f33797e07d9929db670994b7c6fbeb1dc255",
+  "extract_salt_hex": "3e2d8f50bb7a30b866fe5af3dc4b1159185eb23b81e3abfc8427a65b906be0d4",
+  "prk_hex": "aee70a8260887c285e63ad106e84d1a1166186fc69bddff7255a27a50e676c0b",
+  "session_key_hex": "1dd6b27be53b63f857bc44ae25dfd50db0b86897b4013e0038b97c8b7bab7106"
+}

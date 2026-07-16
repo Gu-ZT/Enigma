@@ -73,6 +73,12 @@ type normalizedConfig struct {
 	maxPayload      int
 }
 
+// Validate checks the ETP/1 configuration without performing network I/O.
+func (cfg Config) Validate() error {
+	_, err := normalizeConfig(cfg)
+	return err
+}
+
 // NewConn wraps conn with the ETP/1 record and obfuscation layers.
 func NewConn(conn net.Conn, cfg Config) (*Conn, error) {
 	if conn == nil {

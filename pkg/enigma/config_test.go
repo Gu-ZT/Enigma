@@ -50,4 +50,13 @@ func TestNewConnRejectsNil(t *testing.T) {
 	}
 }
 
+func TestConfigValidate(t *testing.T) {
+	if err := (Config{Key: bytes.Repeat([]byte{1}, 32)}).Validate(); err != nil {
+		t.Fatalf("valid config: %v", err)
+	}
+	if err := (Config{Key: bytes.Repeat([]byte{1}, 31)}).Validate(); err == nil {
+		t.Fatal("short key validated")
+	}
+}
+
 var _ net.Conn = (*Conn)(nil)

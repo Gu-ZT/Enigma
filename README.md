@@ -42,6 +42,13 @@ be inserted between any encoded symbols without negotiating their positions.
 - Lengths are bounded and checked before body allocation.
 - Authentication or structural failure permanently terminates that read side.
 
+### Optional forward-secret tunnel handshake
+
+`internal/tunnel` now provides the experimental ETPH/1 layer: a PSK-protected
+ephemeral X25519 handshake, timestamp validation, and a bounded nonce replay
+cache. Its derived session key replaces the static PSK before ETP/1 application
+records begin.
+
 ## Current Support
 
 - Go 1.26 or later;
@@ -50,13 +57,15 @@ be inserted between any encoded symbols without negotiating their positions.
 - serialized concurrent writes;
 - automatic splitting of large writes into bounded records;
 - partial reads from already authenticated records;
-- custom printable cover and padding alphabets.
+- custom printable cover and padding alphabets;
+- an internal authenticated X25519 upgrade for future client/server integration.
 
 ## Limitations and TODO
 
-1. **No forward secrecy:** ETP/1 currently uses only a pre-shared key.
-2. **No connection replay cache:** a complete captured stream can be replayed
-   unless the application adds an authenticated handshake and replay guard.
+1. **Raw codec has no forward secrecy:** direct `pkg/enigma.NewConn` use relies
+   only on its configured key; use ETPH/1 when the tunnel layer is appropriate.
+2. **Replay protection is process-local:** ETPH/1 rejects cached client nonces,
+   but the bounded cache is not persistent across server restarts.
 3. **No traffic-shape secrecy:** endpoints, timing, and total byte count remain
    observable.
 4. **TCP only:** unordered or lossy datagram transports are not supported.
@@ -130,6 +139,7 @@ need to run concurrently on unbuffered transports such as `net.Pipe`.
 
 - [Go configuration guide](./docs/CONFIGURATION.md)
 - [ETP/1 wire protocol](./docs/PROTOCOL.md)
+- [ETPH/1 authenticated handshake](./docs/HANDSHAKE.md)
 - [`pkg/enigma` raw-stream API](./pkg/enigma/README.md)
 - [Implementation plan and roadmap](./PLAN.md)
 
@@ -188,6 +198,7 @@ pkg/enigma/
   cover.go        printable encoding and padding filter
   conn.go         AES-GCM records and net.Conn wrapper
   *_test.go       unit, duplex, tamper, and example tests
+internal/tunnel/  authenticated X25519 upgrade and replay cache
 ```
 
 `ref/sudoku-main` is used only to study transport layering and documentation
