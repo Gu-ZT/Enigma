@@ -42,6 +42,18 @@ type normalizedConfig struct {
 	now          func() time.Time
 }
 
+// ValidateClient checks a client handshake configuration without network I/O.
+func (cfg Config) ValidateClient() error {
+	_, err := normalizeConfig(cfg, false)
+	return err
+}
+
+// ValidateServer checks a server handshake configuration without network I/O.
+func (cfg Config) ValidateServer() error {
+	_, err := normalizeConfig(cfg, true)
+	return err
+}
+
 func normalizeConfig(cfg Config, server bool) (normalizedConfig, error) {
 	var out normalizedConfig
 	if err := cfg.Codec.Validate(); err != nil {

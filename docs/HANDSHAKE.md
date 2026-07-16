@@ -151,8 +151,8 @@ guard per connection provides no replay protection.
 handshake and clear it after a successful upgrade. Callers remain responsible
 for closing failed raw connections and setting application traffic deadlines.
 
-`internal/tunnel` is internal to this Go module. A stable external facade will
-be added when the client/server application layer is introduced.
+`internal/tunnel` is internal to this Go module. It is currently consumed by
+`internal/app` and `cmd/enigma`; a stable external facade is not yet published.
 
 ## 7. Failure Behavior
 
