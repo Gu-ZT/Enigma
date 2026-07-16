@@ -8,7 +8,9 @@ import (
 	"net"
 	"time"
 
+	enigmamux "Enigma/internal/mux"
 	"Enigma/internal/tunnel"
+	"Enigma/internal/uot"
 )
 
 const defaultDialTimeout = 10 * time.Second
@@ -18,10 +20,14 @@ type Logger interface {
 	Printf(format string, args ...any)
 }
 
-// ContextDialer opens outbound TCP connections.
+// ContextDialer opens outbound TCP or UDP connections.
 type ContextDialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
+
+// ConnWrapper optionally upgrades a raw connection before ETPH/1 starts. It
+// is used for transport profiles such as TLS or an HTTP prelude.
+type ConnWrapper func(net.Conn) (net.Conn, error)
 
 // TargetSelection is the result of a local target protocol handshake.
 // Respond is called exactly once after the remote target succeeds or fails.
@@ -35,11 +41,16 @@ type TargetSelector func(net.Conn) (TargetSelection, error)
 
 // ServerConfig controls accepted tunnel connections and target dialing.
 type ServerConfig struct {
-	Tunnel tunnel.Config
+	Tunnel    tunnel.Config
+	Mux       bool
+	MuxConfig enigmamux.Config
+	UDP       bool
+	UoTConfig uot.Config
 
 	DialTimeout time.Duration
 	Dialer      ContextDialer
 	Logger      Logger
+	WrapConn    ConnWrapper
 
 	// AllowTarget may reject a canonical host:port before any outbound dial.
 	// A nil function allows every target authenticated by the tunnel PSK.
@@ -48,7 +59,11 @@ type ServerConfig struct {
 
 // ClientConfig controls a fixed-target or protocol-selected local TCP forwarder.
 type ClientConfig struct {
-	Tunnel tunnel.Config
+	Tunnel    tunnel.Config
+	Mux       bool
+	MuxConfig enigmamux.Config
+	UDP       bool
+	UoTConfig uot.Config
 
 	ServerAddress         string
 	TargetAddress         string
@@ -57,6 +72,7 @@ type ClientConfig struct {
 	DialTimeout           time.Duration
 	Dialer                ContextDialer
 	Logger                Logger
+	WrapConn              ConnWrapper
 }
 
 // ServeServer accepts ETPH/1 connections until ctx is canceled or listener
@@ -67,6 +83,9 @@ func ServeServer(ctx context.Context, listener net.Listener, cfg ServerConfig) e
 	}
 	if cfg.DialTimeout < 0 {
 		return fmt.Errorf("app: DialTimeout must not be negative")
+	}
+	if cfg.UDP && !cfg.Mux {
+		return fmt.Errorf("app: UDP mode requires mux")
 	}
 	if err := cfg.Tunnel.ValidateServer(); err != nil {
 		return fmt.Errorf("app: invalid server tunnel config: %w", err)
@@ -86,7 +105,11 @@ func ServeServer(ctx context.Context, listener net.Listener, cfg ServerConfig) e
 			return fmt.Errorf("app: accept tunnel: %w", err)
 		}
 		go func() {
-			if err := handleServerConn(ctx, raw, cfg, dialer); err != nil && cfg.Logger != nil {
+			handler := handleServerConn
+			if cfg.Mux {
+				handler = handleServerMuxConn
+			}
+			if err := handler(ctx, raw, cfg, dialer); err != nil && cfg.Logger != nil {
 				cfg.Logger.Printf("server connection %s: %v", raw.RemoteAddr(), err)
 			}
 		}()
@@ -122,6 +145,9 @@ func ServeClient(ctx context.Context, listener net.Listener, cfg ClientConfig) e
 	if dialer == nil {
 		dialer = &net.Dialer{}
 	}
+	if cfg.Mux {
+		return serveMuxClient(ctx, listener, cfg, dialer)
+	}
 	stop := closeListenerOnCancel(ctx, listener)
 	defer close(stop)
 	for {
@@ -142,6 +168,14 @@ func ServeClient(ctx context.Context, listener net.Listener, cfg ClientConfig) e
 
 func handleServerConn(ctx context.Context, raw net.Conn, cfg ServerConfig, dialer ContextDialer) error {
 	defer raw.Close()
+	if cfg.WrapConn != nil {
+		wrapped, err := cfg.WrapConn(raw)
+		if err != nil {
+			return fmt.Errorf("transport wrapper: %w", err)
+		}
+		raw = wrapped
+		defer raw.Close()
+	}
 	conn, err := tunnel.NewServerConn(raw, cfg.Tunnel)
 	if err != nil {
 		return fmt.Errorf("handshake: %w", err)
@@ -186,6 +220,15 @@ func handleClientConn(ctx context.Context, local net.Conn, cfg ClientConfig, dia
 		return fmt.Errorf("dial server %s: %w", cfg.ServerAddress, err)
 	}
 	defer raw.Close()
+	if cfg.WrapConn != nil {
+		wrapped, err := cfg.WrapConn(raw)
+		if err != nil {
+			_ = respondToSelection(selection, err)
+			return fmt.Errorf("transport wrapper: %w", err)
+		}
+		raw = wrapped
+		defer raw.Close()
+	}
 	conn, err := tunnel.NewClientConn(raw, cfg.Tunnel)
 	if err != nil {
 		_ = respondToSelection(selection, err)

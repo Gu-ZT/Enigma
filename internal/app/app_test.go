@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"Enigma/internal/transport"
 	"Enigma/internal/tunnel"
 	"Enigma/pkg/enigma"
 )
@@ -99,6 +100,191 @@ func TestFixedTargetForwardingEndToEnd(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("echo server did not finish")
+	}
+}
+
+func TestMuxForwardingMultipleConnections(t *testing.T) {
+	echoListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer echoListener.Close()
+	echoDone := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			conn, err := echoListener.Accept()
+			if err != nil {
+				echoDone <- err
+				return
+			}
+			defer conn.Close()
+			_, err = io.Copy(conn, conn)
+			echoDone <- err
+		}()
+	}
+
+	serverListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := tunnel.NewReplayGuard(128, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := testCodecConfig()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serverDone := make(chan error, 1)
+	clientDone := make(chan error, 1)
+	targetAddress := echoListener.Addr().String()
+	go func() {
+		serverDone <- ServeServer(ctx, serverListener, ServerConfig{
+			Tunnel: tunnel.Config{Codec: codec, ReplayGuard: guard},
+			Mux:    true,
+			WrapConn: func(conn net.Conn) (net.Conn, error) {
+				return transport.ServerHTTP(conn, transport.HTTPConfig{Host: "mux.example", Path: "/etph"})
+			},
+			AllowTarget: func(address string) bool {
+				return address == targetAddress
+			},
+		})
+	}()
+	go func() {
+		clientDone <- ServeClient(ctx, clientListener, ClientConfig{
+			Tunnel:        tunnel.Config{Codec: codec},
+			Mux:           true,
+			ServerAddress: serverListener.Addr().String(),
+			TargetAddress: targetAddress,
+			WrapConn: func(conn net.Conn) (net.Conn, error) {
+				return transport.ClientHTTP(conn, transport.HTTPConfig{Host: "mux.example", Path: "/etph"})
+			},
+		})
+	}()
+
+	for i := 0; i < 2; i++ {
+		local, err := net.Dial("tcp", clientListener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := local.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			_ = local.Close()
+			t.Fatal(err)
+		}
+		payload := []byte("mux payload " + string(rune('A'+i)))
+		if _, err := local.Write(payload); err != nil {
+			_ = local.Close()
+			t.Fatal(err)
+		}
+		received := make([]byte, len(payload))
+		if _, err := io.ReadFull(local, received); err != nil {
+			_ = local.Close()
+			t.Fatal(err)
+		}
+		if !bytes.Equal(received, payload) {
+			t.Fatalf("mux payload %d mismatch", i)
+		}
+		_ = local.Close()
+	}
+	cancel()
+	waitServeResult(t, "server", serverDone)
+	waitServeResult(t, "client", clientDone)
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-echoDone:
+			if err != nil {
+				t.Fatalf("echo server: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("echo server did not finish")
+		}
+	}
+}
+
+func TestUDPForwardingEndToEnd(t *testing.T) {
+	echo, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer echo.Close()
+	echoDone := make(chan error, 1)
+	go func() {
+		buffer := make([]byte, 2048)
+		n, peer, err := echo.ReadFromUDP(buffer)
+		if err == nil {
+			_, err = echo.WriteToUDP(buffer[:n], peer)
+		}
+		echoDone <- err
+	}()
+
+	serverListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientUDP, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := tunnel.NewReplayGuard(128, 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := testCodecConfig()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serverDone := make(chan error, 1)
+	clientDone := make(chan error, 1)
+	target := echo.LocalAddr().String()
+	go func() {
+		serverDone <- ServeServer(ctx, serverListener, ServerConfig{
+			Tunnel:      tunnel.Config{Codec: codec, ReplayGuard: guard},
+			Mux:         true,
+			UDP:         true,
+			AllowTarget: func(address string) bool { return address == target },
+		})
+	}()
+	go func() {
+		clientDone <- ServeUDPClient(ctx, clientUDP, ClientConfig{
+			Tunnel:        tunnel.Config{Codec: codec},
+			Mux:           true,
+			UDP:           true,
+			ServerAddress: serverListener.Addr().String(),
+			TargetAddress: target,
+		}, nil)
+	}()
+
+	local, err := net.DialUDP("udp", nil, clientUDP.LocalAddr().(*net.UDPAddr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer local.Close()
+	if err := local.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("uot loopback")
+	if _, err := local.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	received := make([]byte, len(payload))
+	if _, err := io.ReadFull(local, received); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(received, payload) {
+		t.Fatalf("UDP payload = %q, want %q", received, payload)
+	}
+	cancel()
+	waitServeResult(t, "server", serverDone)
+	waitServeResult(t, "client", clientDone)
+	select {
+	case err := <-echoDone:
+		if err != nil {
+			t.Fatalf("UDP echo: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("UDP echo did not finish")
 	}
 }
 

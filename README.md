@@ -1,4 +1,5 @@
 <p align="center">
+  <img alt="icon" src="assets/icon.svg" style="width: 256px; height: 256px"/><br>
   <strong>Enigma Traffic Protocol</strong><br>
   An authenticated printable-stream codec inspired by Enigma rotor machines
 </p>
@@ -12,9 +13,8 @@ streams. It applies an Enigma-inspired plugboard, three rotating wheels, and a
 reflector to authenticated records, then maps the result to printable ASCII
 with optional ignorable padding.
 
-ETP/1 is experimental. The repository now includes fixed-target, no-auth SOCKS5,
-and HTTP CONNECT client/server commands, but it does not yet provide
-multiplexing or UDP.
+ETP/1 is experimental. The repository includes fixed-target TCP/UDP, no-auth
+SOCKS5, HTTP CONNECT, mux, and optional HTTP/TLS client/server modes.
 
 ## Core Features
 
@@ -72,8 +72,9 @@ records begin.
 3. **No traffic-shape secrecy:** endpoints, timing, and total byte count remain
    observable.
 4. **TCP only:** unordered or lossy datagram transports are not supported.
-5. **Limited proxy protocols:** the command supports fixed targets, no-auth
-   SOCKS5, and HTTP CONNECT, but not TUN, mux, fallback, HTTP camouflage, or UDP.
+5. **Limited proxy protocols:** the command supports fixed TCP/UDP targets,
+   no-auth SOCKS5, HTTP CONNECT, mux, UoT, and optional HTTP/TLS wrappers. TUN,
+   fallback, and dynamic-target SOCKS UDP associations are not included.
 6. **Encoding overhead:** printable encoding uses two symbols per transformed
    byte before optional padding.
 
@@ -101,6 +102,14 @@ enigma client -listen 127.0.0.1:1080 \
 ```
 
 See the [command-line guide](./docs/COMMANDS.md) for flags and deployment notes.
+The [architecture guide](./docs/ARCHITECTURE.md) explains the repository paths
+and how they relate to the reference project.
+The experimental [mux design](./docs/MUX.md) documents the current logical-stream
+core and its integration boundary.
+The [UoT design](./docs/UOT.md) documents the bounded UDP-over-stream packet
+layer.
+The [transport wrapper guide](./docs/TRANSPORT.md) describes optional HTTP and
+TLS camouflage layers.
 
 For a local no-auth SOCKS5 listener, omit `-target` and use `-socks5`:
 

@@ -70,18 +70,24 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	flags := flag.NewFlagSet("server", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	listenAddress := flags.String("listen", ":8443", "TCP listen address")
+	muxEnabled := flags.Bool("mux", false, "reuse one authenticated connection for multiple streams")
+	udpEnabled := flags.Bool("udp", false, "serve UoT UDP streams; requires -mux")
 	dialTimeout := flags.Duration("dial-timeout", 10*time.Second, "target dial timeout")
 	replayCapacity := flags.Int("replay-capacity", 65536, "maximum live client nonces")
 	replayTTL := flags.Duration("replay-ttl", 2*time.Minute, "client nonce retention")
 	var allowedTargets stringList
-	flags.Var(&allowedTargets, "allow-target", "allowed canonical host:port; repeatable, empty allows all")
+	flags.Var(&allowedTargets, "allow-target", "allowed host:port, *.domain:port, or CIDR:port; repeatable, empty allows all")
 	codecFlags := addCodecFlags(flags)
 	handshakeFlags := addHandshakeFlags(flags)
+	transportFlags := addServerTransportFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("server does not accept positional arguments")
+	}
+	if *udpEnabled && !*muxEnabled {
+		return fmt.Errorf("-udp requires -mux")
 	}
 	codec, err := codecFlags.config()
 	if err != nil {
@@ -104,6 +110,10 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	wrapConn, err := transportFlags.wrapper(handshakeFlags.timeout)
+	if err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", *listenAddress)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", *listenAddress, err)
@@ -112,16 +122,21 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	logger.Printf("listening on %s", listener.Addr())
 	return app.ServeServer(ctx, listener, app.ServerConfig{
 		Tunnel:      tunnelConfig,
+		Mux:         *muxEnabled,
+		UDP:         *udpEnabled,
 		DialTimeout: *dialTimeout,
 		Logger:      logger,
 		AllowTarget: allowTarget,
+		WrapConn:    wrapConn,
 	})
 }
 
 func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	flags := flag.NewFlagSet("client", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	listenAddress := flags.String("listen", "127.0.0.1:1080", "local TCP listen address")
+	listenAddress := flags.String("listen", "127.0.0.1:1080", "local TCP or UDP listen address")
+	muxEnabled := flags.Bool("mux", false, "reuse one authenticated connection for multiple local connections")
+	udpEnabled := flags.Bool("udp", false, "listen on UDP and forward a fixed target; requires -mux")
 	serverAddress := flags.String("server", "", "ETPH/1 server host:port")
 	targetAddress := flags.String("target", "", "fixed target host:port")
 	socks5 := flags.Bool("socks5", false, "serve a local no-auth SOCKS5 listener instead of a fixed target")
@@ -133,6 +148,7 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	dialTimeout := flags.Duration("dial-timeout", 10*time.Second, "server dial timeout")
 	codecFlags := addCodecFlags(flags)
 	handshakeFlags := addHandshakeFlags(flags)
+	transportFlags := addClientTransportFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -145,6 +161,9 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	if *socks5 && *httpConnect {
 		return fmt.Errorf("-socks5 and -http-connect are mutually exclusive")
 	}
+	if *udpEnabled && (!*muxEnabled || *socks5 || *httpConnect) {
+		return fmt.Errorf("-udp requires -mux and cannot be combined with -socks5 or -http-connect")
+	}
 	if *socks5 || *httpConnect {
 		if *targetAddress != "" {
 			return fmt.Errorf("-target cannot be used with protocol-selected local modes")
@@ -154,6 +173,9 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 		}
 	} else if err := tunnel.ValidateTargetAddress(*targetAddress); err != nil {
 		return fmt.Errorf("invalid -target: %w", err)
+	}
+	if *udpEnabled && *targetAddress == "" {
+		return fmt.Errorf("-udp requires -target")
 	}
 	codec, err := codecFlags.config()
 	if err != nil {
@@ -166,6 +188,32 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	}
 	if err := tunnelConfig.ValidateClient(); err != nil {
 		return err
+	}
+	wrapConn, err := transportFlags.wrapper(*serverAddress, handshakeFlags.timeout)
+	if err != nil {
+		return err
+	}
+	if *udpEnabled {
+		udpAddress, err := net.ResolveUDPAddr("udp", *listenAddress)
+		if err != nil {
+			return fmt.Errorf("resolve UDP listen address: %w", err)
+		}
+		udpListener, err := net.ListenUDP("udp", udpAddress)
+		if err != nil {
+			return fmt.Errorf("listen UDP %s: %w", *listenAddress, err)
+		}
+		logger := log.New(stderr, "enigma-client: ", log.LstdFlags)
+		logger.Printf("UDP listening on %s through %s to %s", udpListener.LocalAddr(), *serverAddress, *targetAddress)
+		return app.ServeUDPClient(ctx, udpListener, app.ClientConfig{
+			Tunnel:        tunnelConfig,
+			Mux:           true,
+			UDP:           true,
+			ServerAddress: *serverAddress,
+			TargetAddress: *targetAddress,
+			DialTimeout:   *dialTimeout,
+			Logger:        logger,
+			WrapConn:      wrapConn,
+		}, nil)
 	}
 	listener, err := net.Listen("tcp", *listenAddress)
 	if err != nil {
@@ -181,12 +229,14 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	}
 	return app.ServeClient(ctx, listener, app.ClientConfig{
 		Tunnel:                tunnelConfig,
+		Mux:                   *muxEnabled,
 		ServerAddress:         *serverAddress,
 		TargetAddress:         *targetAddress,
 		TargetSelector:        selectTargetSelector(*socks5, *httpConnect),
 		LocalHandshakeTimeout: localHandshakeTimeout,
 		DialTimeout:           *dialTimeout,
 		Logger:                logger,
+		WrapConn:              wrapConn,
 	})
 }
 
@@ -278,35 +328,16 @@ func (values *stringList) Set(value string) error {
 	return nil
 }
 
-func buildTargetPolicy(values []string) (func(string) bool, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	allowed := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		if value == "*" {
-			return nil, nil
-		}
-		if err := tunnel.ValidateTargetAddress(value); err != nil {
-			return nil, fmt.Errorf("invalid -allow-target %q: %w", value, err)
-		}
-		allowed[value] = struct{}{}
-	}
-	return func(address string) bool {
-		_, ok := allowed[address]
-		return ok
-	}, nil
-}
-
 func usageError() error {
 	return errors.New(usageText)
 }
 
 const usageText = `Usage:
   enigma keygen
-  enigma server -key-file PATH [-listen :8443] [-allow-target host:port]
-  enigma client -key-file PATH -server host:port -target host:port [-listen 127.0.0.1:1080]
+  enigma server -key-file PATH [-listen :8443] [-mux] [-allow-target rule]
+  enigma client -key-file PATH -server host:port [-mux] -target host:port [-listen 127.0.0.1:1080]
   enigma client -key-file PATH -server host:port -socks5 [-listen 127.0.0.1:1080]
+  enigma client -key-file PATH -server host:port -mux -udp -target host:port [-listen 127.0.0.1:1080]
   enigma client -key-file PATH -server host:port -http-connect [-listen 127.0.0.1:1080]
 
 The client command supports fixed-target TCP forwarding, no-auth SOCKS5, and HTTP CONNECT.

@@ -38,13 +38,16 @@ enigma server \
   -allow-target example.com:80
 ```
 
-`-allow-target` is repeatable and matches canonical `host:port` values exactly:
+`-allow-target` is repeatable. Rules may be an exact canonical `host:port`, a
+subdomain pattern such as `*.example.com:443`, or an IP CIDR with a port such
+as `192.0.2.0/24:*`:
 
 ```bash
 enigma server \
   -key-file enigma.key \
   -allow-target example.com:80 \
-  -allow-target example.com:443
+  -allow-target '*.example.com:443' \
+  -allow-target '192.0.2.0/24:*'
 ```
 
 If no `-allow-target` is supplied, every holder of the PSK may request any TCP
@@ -103,6 +106,51 @@ authentication. It returns `200 Connection Established` only after the remote
 target is open, and returns a generic `502 Bad Gateway` on remote failure. It
 does not accept ordinary HTTP methods or implement an HTTP application proxy.
 
+## Mux Mode
+
+Add `-mux` to both `server` and `client` to reuse one authenticated ETPH/ETP
+connection for multiple local TCP connections. Each logical stream performs its
+own target negotiation and relay. The current session is single-shot: if the
+shared connection fails, the process does not reconnect it automatically.
+
+## UDP/UoT Mode
+
+Use `-mux -udp` on both sides and configure one fixed `-target` on the client:
+
+```bash
+enigma server -mux -udp -listen :8443 -key-file enigma.key \
+  -allow-target 192.0.2.53:53
+
+enigma client -mux -udp -listen 127.0.0.1:1053 \
+  -server server.example.com:8443 -target 192.0.2.53:53 \
+  -key-file enigma.key
+```
+
+The client listener is UDP. Datagram boundaries are preserved through UoT on
+one mux stream. This mode currently supports one fixed target and routes replies
+to the most recently active local UDP peer; it is not a general SOCKS UDP
+association implementation.
+
+## TLS and HTTP Camouflage
+
+Both sides must enable the same wrappers. When both are enabled, HTTP runs
+inside TLS:
+
+```bash
+enigma server -tls -tls-cert server.crt -tls-key server.key \
+  -http-camouflage -http-host edge.example.com -http-path /sync \
+  -key-file enigma.key
+
+enigma client -tls -tls-server-name edge.example.com \
+  -http-camouflage -http-host edge.example.com -http-path /sync \
+  -server edge.example.com:8443 -target example.com:443 \
+  -key-file enigma.key
+```
+
+The client uses system roots unless `-tls-ca-file` is supplied. The
+`-tls-insecure-skip-verify` option disables certificate verification and should
+only be used for isolated testing.
+
 ## Common Codec Flags
 
 These flags are available on both `server` and `client` and must be compatible
@@ -130,7 +178,15 @@ Use only one of `-key` and `-key-file`.
 | `-dial-timeout` | `10s` | Target TCP dial timeout |
 | `-replay-capacity` | `65536` | Maximum simultaneously live client nonces |
 | `-replay-ttl` | `2m` | Nonce retention; must be at least twice `-clock-skew` |
-| `-allow-target` | unrestricted | Exact target allow-list entry; repeatable |
+| `-allow-target` | unrestricted | Exact host, `*.domain`, or CIDR target rule; repeatable |
+| `-mux` | `false` | Reuse one authenticated connection for multiple streams |
+| `-udp` | `false` | Handle fixed-target UoT streams; requires `-mux` |
+| `-tls` | `false` | Wrap accepted connections with TLS |
+| `-tls-cert` | none | TLS server certificate PEM; requires `-tls` |
+| `-tls-key` | none | TLS server private key PEM; requires `-tls` |
+| `-http-camouflage` | `false` | Expect an HTTP/1.1 prelude before ETPH/1 |
+| `-http-host` | none | Expected HTTP camouflage Host header |
+| `-http-path` | `/` | Expected HTTP camouflage request path |
 
 A full replay cache rejects new authenticated handshakes until entries expire;
 it never evicts a live nonce early.
@@ -144,8 +200,17 @@ it never evicts a live nonce early.
 | `-target` | none | Fixed target `host:port`; omit with `-socks5` or `-http-connect` |
 | `-socks5` | false | Enable no-auth SOCKS5 target selection |
 | `-http-connect` | false | Enable HTTP CONNECT target selection |
+| `-tls` | `false` | Wrap the server connection with TLS |
+| `-tls-ca-file` | none | PEM CA bundle for TLS server verification |
+| `-tls-server-name` | server host | TLS SNI and certificate name |
+| `-tls-insecure-skip-verify` | `false` | Disable TLS verification; unsafe and explicit |
+| `-http-camouflage` | `false` | Send an HTTP/1.1 prelude before ETPH/1 |
+| `-http-host` | server host | HTTP camouflage Host header |
+| `-http-path` | `/` | HTTP camouflage request path |
 | `-dial-timeout` | `10s` | Server TCP dial timeout |
 | `-local-handshake-timeout` | `10s` | Local SOCKS5/HTTP request deadline |
+| `-mux` | `false` | Reuse one authenticated connection for multiple local connections |
+| `-udp` | `false` | Listen on UDP for one fixed target; requires `-mux` |
 
 ## Shutdown and Errors
 
@@ -158,8 +223,9 @@ outbound dial errors remain in server logs.
 
 ## Current Limitations
 
-- no TUN, UDP, or multiplexing;
+- no TUN or dynamic-target SOCKS UDP association;
 - no JSON configuration or automatic service installation;
 - no persistent replay database across restarts;
-- no HTTP/TLS camouflage or defensive fallback;
-- target allow-list entries are exact strings, not CIDR or domain patterns.
+- no defensive fallback;
+- mux sessions do not automatically reconnect after the shared connection fails;
+- UDP mode supports one fixed target and one active local peer association;
