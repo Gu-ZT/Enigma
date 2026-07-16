@@ -23,6 +23,16 @@ type ContextDialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
 
+// TargetSelection is the result of a local target protocol handshake.
+// Respond is called exactly once after the remote target succeeds or fails.
+type TargetSelection struct {
+	Address string
+	Respond func(error) error
+}
+
+// TargetSelector extracts one canonical target from a local connection.
+type TargetSelector func(net.Conn) (TargetSelection, error)
+
 // ServerConfig controls accepted tunnel connections and target dialing.
 type ServerConfig struct {
 	Tunnel tunnel.Config
@@ -36,15 +46,17 @@ type ServerConfig struct {
 	AllowTarget func(address string) bool
 }
 
-// ClientConfig controls a fixed-target local TCP forwarder.
+// ClientConfig controls a fixed-target or protocol-selected local TCP forwarder.
 type ClientConfig struct {
 	Tunnel tunnel.Config
 
-	ServerAddress string
-	TargetAddress string
-	DialTimeout   time.Duration
-	Dialer        ContextDialer
-	Logger        Logger
+	ServerAddress         string
+	TargetAddress         string
+	TargetSelector        TargetSelector
+	LocalHandshakeTimeout time.Duration
+	DialTimeout           time.Duration
+	Dialer                ContextDialer
+	Logger                Logger
 }
 
 // ServeServer accepts ETPH/1 connections until ctx is canceled or listener
@@ -90,8 +102,15 @@ func ServeClient(ctx context.Context, listener net.Listener, cfg ClientConfig) e
 	if cfg.ServerAddress == "" {
 		return fmt.Errorf("app: ServerAddress is required")
 	}
-	if err := tunnel.ValidateTargetAddress(cfg.TargetAddress); err != nil {
-		return fmt.Errorf("app: invalid TargetAddress: %w", err)
+	if cfg.TargetSelector == nil {
+		if err := tunnel.ValidateTargetAddress(cfg.TargetAddress); err != nil {
+			return fmt.Errorf("app: invalid TargetAddress: %w", err)
+		}
+	} else if cfg.TargetAddress != "" {
+		return fmt.Errorf("app: TargetAddress must be empty when TargetSelector is set")
+	}
+	if cfg.LocalHandshakeTimeout < 0 {
+		return fmt.Errorf("app: LocalHandshakeTimeout must not be negative")
 	}
 	if cfg.DialTimeout < 0 {
 		return fmt.Errorf("app: DialTimeout must not be negative")
@@ -151,21 +170,59 @@ func handleServerConn(ctx context.Context, raw net.Conn, cfg ServerConfig, diale
 
 func handleClientConn(ctx context.Context, local net.Conn, cfg ClientConfig, dialer ContextDialer) error {
 	defer local.Close()
+	selection, err := selectTarget(local, cfg)
+	if err != nil {
+		return fmt.Errorf("select target: %w", err)
+	}
+	if err := tunnel.ValidateTargetAddress(selection.Address); err != nil {
+		_ = respondToSelection(selection, err)
+		return err
+	}
 	dialCtx, cancel := context.WithTimeout(ctx, effectiveDialTimeout(cfg.DialTimeout))
 	raw, err := dialer.DialContext(dialCtx, "tcp", cfg.ServerAddress)
 	cancel()
 	if err != nil {
+		_ = respondToSelection(selection, err)
 		return fmt.Errorf("dial server %s: %w", cfg.ServerAddress, err)
 	}
 	defer raw.Close()
 	conn, err := tunnel.NewClientConn(raw, cfg.Tunnel)
 	if err != nil {
+		_ = respondToSelection(selection, err)
 		return fmt.Errorf("handshake: %w", err)
 	}
-	if err := tunnel.OpenTarget(conn, cfg.TargetAddress); err != nil {
-		return fmt.Errorf("open target %s: %w", cfg.TargetAddress, err)
+	if err := tunnel.OpenTarget(conn, selection.Address); err != nil {
+		_ = respondToSelection(selection, err)
+		return fmt.Errorf("open target %s: %w", selection.Address, err)
+	}
+	if err := respondToSelection(selection, nil); err != nil {
+		return fmt.Errorf("respond to local target request: %w", err)
 	}
 	return relay(local, conn)
+}
+
+func selectTarget(local net.Conn, cfg ClientConfig) (TargetSelection, error) {
+	if cfg.TargetSelector == nil {
+		return TargetSelection{Address: cfg.TargetAddress}, nil
+	}
+	timeout := cfg.LocalHandshakeTimeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+	if timeout > 0 {
+		if err := local.SetDeadline(time.Now().Add(timeout)); err != nil {
+			return TargetSelection{}, fmt.Errorf("set local handshake deadline: %w", err)
+		}
+		defer local.SetDeadline(time.Time{})
+	}
+	return cfg.TargetSelector(local)
+}
+
+func respondToSelection(selection TargetSelection, err error) error {
+	if selection.Respond == nil {
+		return nil
+	}
+	return selection.Respond(err)
 }
 
 func effectiveDialTimeout(value time.Duration) time.Duration {

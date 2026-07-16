@@ -2,12 +2,13 @@
 
 [中文说明](./COMMANDS.zh_CN.md)
 
-The `cmd/enigma` program provides an experimental fixed-target TCP tunnel. It
-uses ETPH/1 for authenticated X25519 key establishment and ETP/1 for protected,
-printable traffic records.
+The `cmd/enigma` program provides experimental fixed-target and no-auth SOCKS5
+TCP tunnels. It uses ETPH/1 for authenticated X25519 key establishment and
+ETP/1 for protected, printable traffic records.
 
-It is not a SOCKS or HTTP proxy. Every client process forwards its local listen
-port to one configured target.
+It is not an HTTP CONNECT proxy. Fixed-target mode forwards every local
+connection to one configured target; SOCKS5 mode selects a target per local
+connection.
 
 ## Build
 
@@ -72,6 +73,21 @@ curl -H "Host: example.com" http://127.0.0.1:1080/
 The local port transports the target protocol directly. Applications must speak
 the protocol expected by the configured target.
 
+## SOCKS5 Mode
+
+```bash
+enigma client \
+  -socks5 \
+  -listen 127.0.0.1:1080 \
+  -server server.example.com:8443 \
+  -key-file enigma.key
+```
+
+The local listener accepts SOCKS5 `CONNECT` with no authentication. Each request
+chooses its own domain, IPv4, or IPv6 target. The SOCKS5 success reply is sent
+only after the server has authenticated the tunnel, passed the target policy,
+and opened the target TCP connection.
+
 ## Common Codec Flags
 
 These flags are available on both `server` and `client` and must be compatible
@@ -110,8 +126,10 @@ it never evicts a live nonce early.
 | --- | --- | --- |
 | `-listen` | `127.0.0.1:1080` | Local TCP forwarding address |
 | `-server` | none | Required ETPH/1 server `host:port` |
-| `-target` | none | Required fixed target `host:port` |
+| `-target` | none | Fixed target `host:port`; omit with `-socks5` |
+| `-socks5` | false | Enable no-auth SOCKS5 target selection |
 | `-dial-timeout` | `10s` | Server TCP dial timeout |
+| `-socks5-timeout` | `10s` | Local SOCKS5 request deadline |
 
 ## Shutdown and Errors
 
@@ -124,9 +142,8 @@ outbound dial errors remain in server logs.
 
 ## Current Limitations
 
-- no SOCKS, HTTP CONNECT, TUN, UDP, or multiplexing;
+- no HTTP CONNECT, TUN, UDP, or multiplexing;
 - no JSON configuration or automatic service installation;
 - no persistent replay database across restarts;
 - no HTTP/TLS camouflage or defensive fallback;
 - target allow-list entries are exact strings, not CIDR or domain patterns.
-

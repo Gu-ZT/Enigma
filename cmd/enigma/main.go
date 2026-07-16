@@ -124,6 +124,8 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	listenAddress := flags.String("listen", "127.0.0.1:1080", "local TCP listen address")
 	serverAddress := flags.String("server", "", "ETPH/1 server host:port")
 	targetAddress := flags.String("target", "", "fixed target host:port")
+	socks5 := flags.Bool("socks5", false, "serve a local no-auth SOCKS5 listener instead of a fixed target")
+	socks5Timeout := flags.Duration("socks5-timeout", 10*time.Second, "local SOCKS5 handshake timeout")
 	dialTimeout := flags.Duration("dial-timeout", 10*time.Second, "server dial timeout")
 	codecFlags := addCodecFlags(flags)
 	handshakeFlags := addHandshakeFlags(flags)
@@ -136,7 +138,14 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 	if *serverAddress == "" {
 		return fmt.Errorf("client -server is required")
 	}
-	if err := tunnel.ValidateTargetAddress(*targetAddress); err != nil {
+	if *socks5 {
+		if *targetAddress != "" {
+			return fmt.Errorf("-target cannot be used with -socks5")
+		}
+		if *socks5Timeout < 0 {
+			return fmt.Errorf("-socks5-timeout must not be negative")
+		}
+	} else if err := tunnel.ValidateTargetAddress(*targetAddress); err != nil {
 		return fmt.Errorf("invalid -target: %w", err)
 	}
 	codec, err := codecFlags.config()
@@ -156,14 +165,27 @@ func runClient(ctx context.Context, args []string, stderr io.Writer) error {
 		return fmt.Errorf("listen %s: %w", *listenAddress, err)
 	}
 	logger := log.New(stderr, "enigma-client: ", log.LstdFlags)
-	logger.Printf("listening on %s, forwarding to %s through %s", listener.Addr(), *targetAddress, *serverAddress)
+	if *socks5 {
+		logger.Printf("SOCKS5 listening on %s through %s", listener.Addr(), *serverAddress)
+	} else {
+		logger.Printf("listening on %s, forwarding to %s through %s", listener.Addr(), *targetAddress, *serverAddress)
+	}
 	return app.ServeClient(ctx, listener, app.ClientConfig{
-		Tunnel:        tunnelConfig,
-		ServerAddress: *serverAddress,
-		TargetAddress: *targetAddress,
-		DialTimeout:   *dialTimeout,
-		Logger:        logger,
+		Tunnel:                tunnelConfig,
+		ServerAddress:         *serverAddress,
+		TargetAddress:         *targetAddress,
+		TargetSelector:        selectTargetSelector(*socks5),
+		LocalHandshakeTimeout: *socks5Timeout,
+		DialTimeout:           *dialTimeout,
+		Logger:                logger,
 	})
+}
+
+func selectTargetSelector(socks5 bool) app.TargetSelector {
+	if socks5 {
+		return app.SOCKS5Selector
+	}
+	return nil
 }
 
 type codecFlagValues struct {
@@ -272,6 +294,8 @@ const usageText = `Usage:
   enigma keygen
   enigma server -key-file PATH [-listen :8443] [-allow-target host:port]
   enigma client -key-file PATH -server host:port -target host:port [-listen 127.0.0.1:1080]
+  enigma client -key-file PATH -server host:port -socks5 [-listen 127.0.0.1:1080]
 
-The client command is a fixed-target TCP forwarder, not a SOCKS proxy.
+The client command supports fixed-target TCP forwarding and no-auth SOCKS5.
+It is not an HTTP CONNECT proxy.
 `

@@ -12,8 +12,9 @@ streams. It applies an Enigma-inspired plugboard, three rotating wheels, and a
 reflector to authenticated records, then maps the result to printable ASCII
 with optional ignorable padding.
 
-ETP/1 is experimental. The repository now includes a fixed-target client/server
-command, but it does not yet provide SOCKS, HTTP CONNECT, multiplexing, or UDP.
+ETP/1 is experimental. The repository now includes fixed-target and no-auth
+SOCKS5 client/server commands, but it does not yet provide HTTP CONNECT,
+multiplexing, or UDP.
 
 ## Core Features
 
@@ -59,6 +60,7 @@ records begin.
 - custom printable cover and padding alphabets;
 - an authenticated X25519 tunnel upgrade;
 - a fixed-target TCP client/server command with explicit target negotiation.
+- a no-auth SOCKS5 local listener that uses the same target negotiation.
 
 ## Limitations and TODO
 
@@ -69,8 +71,8 @@ records begin.
 3. **No traffic-shape secrecy:** endpoints, timing, and total byte count remain
    observable.
 4. **TCP only:** unordered or lossy datagram transports are not supported.
-5. **Fixed target only:** the command is a raw TCP forwarder, not a SOCKS/HTTP
-   proxy; mux, fallback, HTTP camouflage, and UDP remain unimplemented.
+5. **Limited proxy protocols:** the command supports fixed targets and no-auth
+   SOCKS5, but not HTTP CONNECT, TUN, mux, fallback, HTTP camouflage, or UDP.
 6. **Encoding overhead:** printable encoding uses two symbols per transformed
    byte before optional padding.
 
@@ -98,6 +100,13 @@ enigma client -listen 127.0.0.1:1080 \
 ```
 
 See the [command-line guide](./docs/COMMANDS.md) for flags and deployment notes.
+
+For a local no-auth SOCKS5 listener, omit `-target` and use `-socks5`:
+
+```bash
+enigma client -socks5 -listen 127.0.0.1:1080 \
+  -server server.example.com:8443 -key-file enigma.key
+```
 
 ### Go codec API
 

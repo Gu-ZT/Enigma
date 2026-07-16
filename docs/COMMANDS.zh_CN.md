@@ -2,10 +2,11 @@
 
 [English](./COMMANDS.md)
 
-`cmd/enigma` 提供实验性的固定目标 TCP 隧道。它使用 ETPH/1 完成认证 X25519 密钥
-建立，再使用 ETP/1 传输受保护的可打印记录。
+`cmd/enigma` 提供实验性的固定目标和无认证 SOCKS5 TCP 隧道。它使用 ETPH/1 完成认证
+X25519 密钥建立，再使用 ETP/1 传输受保护的可打印记录。
 
-它不是 SOCKS 或 HTTP 代理。每个客户端进程只把一个本地监听端口转发到一个固定目标。
+它不是 HTTP CONNECT 代理。固定目标模式把所有本地连接转发到一个目标，SOCKS5 模式
+则为每条本地连接单独选择目标。
 
 ## 编译
 
@@ -67,6 +68,20 @@ curl -H "Host: example.com" http://127.0.0.1:1080/
 
 本地端口直接承载目标协议，应用必须发送目标本身能够理解的数据。
 
+## SOCKS5 模式
+
+```bash
+enigma client \
+  -socks5 \
+  -listen 127.0.0.1:1080 \
+  -server server.example.com:8443 \
+  -key-file enigma.key
+```
+
+本地监听器接受无认证 SOCKS5 `CONNECT`，每个请求可以选择域名、IPv4 或 IPv6 目标。
+只有在服务端完成隧道认证、目标策略检查并成功建立目标 TCP 连接后，才会返回 SOCKS5
+成功响应。
+
 ## 通用 Codec 参数
 
 服务端和客户端都支持下列参数，两端配置必须兼容。
@@ -103,8 +118,10 @@ curl -H "Host: example.com" http://127.0.0.1:1080/
 | --- | --- | --- |
 | `-listen` | `127.0.0.1:1080` | 本地 TCP 转发地址 |
 | `-server` | 无 | 必填，ETPH/1 服务端 `host:port` |
-| `-target` | 无 | 必填，固定目标 `host:port` |
+| `-target` | 无 | 固定目标 `host:port`，使用 `-socks5` 时省略 |
+| `-socks5` | `false` | 开启无认证 SOCKS5 目标选择 |
 | `-dial-timeout` | `10s` | 服务端 TCP 拨号超时 |
+| `-socks5-timeout` | `10s` | 本地 SOCKS5 请求超时 |
 
 ## 关闭与错误
 
@@ -115,9 +132,8 @@ curl -H "Host: example.com" http://127.0.0.1:1080/
 
 ## 当前限制
 
-- 没有 SOCKS、HTTP CONNECT、TUN、UDP 或连接复用；
+- 没有 HTTP CONNECT、TUN、UDP 或连接复用；
 - 没有 JSON 配置和自动服务安装；
 - 重启后不会保留重放数据库；
 - 没有 HTTP/TLS 伪装或防御性 fallback；
 - 目标允许列表只支持精确字符串，不支持 CIDR 或域名模式。
-
