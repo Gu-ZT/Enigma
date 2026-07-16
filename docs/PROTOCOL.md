@@ -1,11 +1,10 @@
 # Enigma Traffic Protocol 1 (ETP/1)
 
-Status: **experimental**
+Status: **experimental, wire behavior locked by test vectors**
 
 This document describes the wire behavior implemented by `pkg/enigma`. It is
 the protocol reference for the current repository, while `PLAN.md` describes
-future work. ETP/1 has no assigned standard identifier and no compatibility
-guarantee across revisions yet.
+future work. ETP/1 has no assigned standard identifier.
 
 ## 1. Scope and Requirements
 
@@ -283,8 +282,16 @@ direction; ETP/1 does not scan for a new record boundary after failure.
 
 ETP/1 carries its version only inside authenticated plaintext and has no public
 magic prefix or negotiation message. Incompatible peers fail length validation
-or record authentication. Future incompatible formats must use a distinct
-protocol/version contract rather than silently changing these fields.
+or record authentication.
 
-Stable interoperability vectors are planned but not yet published.
+The derivation functions, table construction, stepping, record fields, and cover
+encoding documented here are the ETP/1 compatibility contract. The
+[machine-readable vector](../pkg/enigma/testdata/etp1-vectors.json) locks
+representative outputs. Bug fixes and optimizations must preserve those outputs.
 
+Any intentional incompatible change must use a new protocol identifier such as
+ETP/2 and a distinct derivation prefix. Because ETP/1 has no in-band negotiation,
+applications must select future versions out of band rather than probing on the
+same stream.
+
+Additional complete-record interoperability vectors remain planned.

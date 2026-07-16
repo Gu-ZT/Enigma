@@ -166,9 +166,17 @@ Run the race detector when CGO is available:
 go test -race ./...
 ```
 
+Run a fuzz target or the performance suite explicitly:
+
+```bash
+go test -run '^$' -fuzz '^FuzzConnReadFrame$' ./pkg/enigma
+go test -run '^$' -bench . -benchmem ./pkg/enigma
+```
+
 Tests cover configuration validation, rotor involution, per-sequence state,
 printable padding, fragmented reads, multi-record writes, full-duplex traffic,
-wrong keys, modified records, invalid cover bytes, and truncated streams.
+wrong keys, modified records, invalid cover bytes, truncated streams, and the
+machine-readable ETP/1 compatibility vector.
 
 ## Project Layout
 

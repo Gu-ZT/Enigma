@@ -1,0 +1,18 @@
+{
+  "protocol": "ETP/1",
+  "psk_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "session_salt_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+  "sequence_hex": "0102030405060708",
+  "master_hex": "a7e11a2670432878058fce2d2cd79e20ec3b88ae2938b71f51d659580d95a233",
+  "traffic_key_hex": "09cd6bb5aa58cd80086c9df108fc8897de650ffdebbbc06af8151414dd866007",
+  "rotor_seed_hex": "7c7b0df25e1a7311cfb19166d9ed914b178f928c39d2601eec7b2a45d734f01d",
+  "length_key_hex": "5ef35f4b3680e027d0b29ce85f928b0900cc25370c612424474343b33dd3607d",
+  "nonce_prefix_hex": "d02280b3",
+  "rotor_state_hex": "e564fb434670",
+  "rotor_input_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "rotor_output_hex": "c6432606be1c89ea57960713efcba9f37756dd718e1ed0b29f85a9f88f586a87",
+  "length_hex": "1234",
+  "masked_length_hex": "b210",
+  "nonce_hex": "d02280b30102030405060708",
+  "aad_hex": "656e69676d612f6574702f76312f6672616d6501020304050607081234"
+}

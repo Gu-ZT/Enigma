@@ -2,6 +2,7 @@ package enigma
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -165,6 +166,57 @@ func TestConnRejectsUnexpectedCoverByte(t *testing.T) {
 	}
 	if _, err := conn.Read(make([]byte, 1)); !errors.Is(err, ErrUnexpectedCoverByte) {
 		t.Fatalf("unexpected cover error = %v", err)
+	}
+}
+
+func TestConnRejectsInvalidLengthBeforeReadingBody(t *testing.T) {
+	cfg := Config{
+		Key:        bytes.Repeat([]byte{0x27}, 32),
+		MaxPayload: 64,
+	}
+	normalized, err := normalizeConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var salt [sessionSaltSize]byte
+	for i := range salt {
+		salt[i] = byte(i + 1)
+	}
+	session, err := newSession(normalized.master, salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	maximum := innerHeaderSize + normalized.maxPayload + normalized.maxPadding + session.aead.Overhead()
+	header := make([]byte, 2)
+	binary.BigEndian.PutUint16(header, uint16(maximum+1))
+	maskLength(header, session.lengthKey, 0)
+	machine := session.rotors.machineFor(0)
+	machine.transform(header)
+
+	codec, err := newCoverCodec(normalized.coverAlphabet, normalized.paddingAlphabet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedSalt, err := codec.encode(salt[:], 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedHeader, err := codec.encode(header, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire := append(encodedSalt, encodedHeader...)
+
+	conn, err := NewConn(newMemoryConn(wire), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := conn.Read(make([]byte, 1)); n != 0 || !errors.Is(err, ErrInvalidFrame) {
+		t.Fatalf("invalid length returned n=%d err=%v", n, err)
+	}
+	if n, err := conn.Read(make([]byte, 1)); n != 0 || !errors.Is(err, ErrInvalidFrame) {
+		t.Fatalf("terminal invalid length returned n=%d err=%v", n, err)
 	}
 }
 

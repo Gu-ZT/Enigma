@@ -157,8 +157,16 @@ go vet ./...
 go test -race ./...
 ```
 
+单独运行 fuzz 入口或性能基准：
+
+```bash
+go test -run '^$' -fuzz '^FuzzConnReadFrame$' ./pkg/enigma
+go test -run '^$' -bench . -benchmem ./pkg/enigma
+```
+
 现有测试覆盖配置拒绝、转子自反性、逐序列状态、可打印填充、分片读取、多帧写入、
-双向并发、错误密钥、记录篡改、非法 cover 字节和截断输入。
+双向并发、错误密钥、记录篡改、非法 cover 字节、截断输入和机器可读的 ETP/1 兼容
+向量。
 
 ## 项目结构
 
